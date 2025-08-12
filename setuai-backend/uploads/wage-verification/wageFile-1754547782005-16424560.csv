@@ -1,0 +1,11 @@
+Employee ID,Employee Name,Department,Hours Worked (Regular),Regular Wage (₹),Overtime Hours,Overtime Wage (₹),Gross Pay (₹),Deductions (₹),Net Pay (₹)
+EMP001,Rahul Sharma,Sales,160,32000,10,3000,35000,2500,32500
+EMP002,Priya Singh,Marketing,150,30000,8,2400,32400,2000,30400
+EMP003,Amit Kumar,HR,160,32000,5,1500,33500,2200,31300
+EMP004,Sneha Reddy,Finance,165,33000,12,3600,36600,2800,33800
+EMP005,Vikram Gupta,IT,170,34000,15,4500,38500,3000,35500
+EMP006,Neha Joshi,Operations,155,31000,7,2100,33100,2300,30800
+EMP007,Arjun Patel,Sales,160,32000,9,2700,34700,2600,32100
+EMP008,Pooja Devi,Marketing,140,28000,6,1800,29800,1900,27900
+EMP009,Rajeshwari Iyer,HR,160,32000,4,1200,33200,2100,31100
+EMP010,Karthik Subramanian,Finance,160,32000,11,3300,35300,2400,32900

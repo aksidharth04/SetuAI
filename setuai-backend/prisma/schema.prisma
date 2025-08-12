@@ -1,0 +1,364 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+model User {
+  id            String   @id @default(cuid())
+  email         String   @unique
+  name          String
+  password      String
+  role          UserRole @default(VENDOR_ADMIN)
+  vendorId      String
+  vendor        Vendor   @relation(fields: [vendorId], references: [id])
+  createdAt     DateTime @default(now())
+  auditLogs     AuditLog[]
+  buyerEngagements BuyerEngagement[] @relation("BuyerEngagements")
+  invoiceRatings InvoiceRating[]
+  wageVerificationHistory WageVerificationHistory[]
+}
+
+model Vendor {
+  id                String             @id @default(cuid())
+  companyName       String
+  factoryLocation   String // e.g., "Tamil Nadu"
+  complianceStatus  ComplianceStatus   @default(RED)
+  isPublished       Boolean            @default(false)
+  users             User[]
+  uploadedDocuments UploadedDocument[]
+  marketplaceProfile MarketplaceProfile?
+  buyerEngagements  BuyerEngagement[]  @relation("VendorEngagements")
+  invoiceImages     InvoiceImage[]
+  wageVerifications WageVerification[]
+  createdAt         DateTime           @default(now())
+  updatedAt         DateTime           @updatedAt
+  overallComplianceScore Float?
+}
+
+model ComplianceDocument {
+  id                  String   @id @default(cuid())
+  name                String   @unique
+  pillar              CompliancePillar
+  description         String
+  issuingAuthority    String
+  uploadedDocuments   UploadedDocument[]
+  // New fields for verification rules
+  verificationRules   Json?    // Store document-specific validation rules
+  requiredKeywords    String[] // Keywords that must be present
+  optionalKeywords    String[] // Supporting keywords
+  validationRegex     String?  // Regex pattern for document number
+}
+
+model UploadedDocument {
+  id                   String             @id @default(cuid())
+  vendorId             String
+  vendor               Vendor             @relation(fields: [vendorId], references: [id], onDelete: Cascade)
+  complianceDocumentId String
+  complianceDocument   ComplianceDocument @relation(fields: [complianceDocumentId], references: [id])
+  filePath             String // Local file path relative to server
+  originalFilename     String
+  verificationStatus   VerificationStatus @default(PENDING)
+  uploadedAt           DateTime           @default(now())
+  history              AuditLog[]
+  // New fields for verification details
+  verificationSummary  String?           // Human-readable summary of checks
+  extractedData        Json?             // Key-value pairs from the document
+  verificationDetails  Json?             // Detailed verification results
+  lastVerifiedAt       DateTime?         // When the document was last verified
+  expiryDate           DateTime?         // Document's expiry date if applicable
+  apiVerificationId    String?          // ID from external verification API
+  riskScore            Float?
+}
+
+model AuditLog {
+  id              String             @id @default(cuid())
+  documentId      String
+  document        UploadedDocument   @relation(fields: [documentId], references: [id], onDelete: Cascade)
+  changedByUserId String
+  changedByUser   User               @relation(fields: [changedByUserId], references: [id])
+  timestamp       DateTime           @default(now())
+  action          String             // e.g., "STATUS_CHANGE", "UPLOAD"
+  details         String?
+  // New fields for status tracking
+  previousStatus  VerificationStatus?
+  newStatus      VerificationStatus?
+  verificationMethod String?         // e.g., "LOCAL", "API", "MANUAL"
+  apiResponse    Json?              // Store API verification responses
+}
+
+model MarketplaceProfile {
+  id                  String    @id @default(cuid())
+  companyDescription  String?   @db.Text
+  contactEmail        String?
+  websiteUrl          String?
+  logoUrl             String?
+  vendorId            String    @unique
+  vendor              Vendor    @relation(fields: [vendorId], references: [id])
+  createdAt           DateTime  @default(now())
+  updatedAt           DateTime  @updatedAt
+}
+
+model BuyerEngagement {
+  id                String              @id @default(cuid())
+  buyerId           String
+  buyer             User                @relation("BuyerEngagements", fields: [buyerId], references: [id])
+  vendorId          String
+  vendor            Vendor              @relation("VendorEngagements", fields: [vendorId], references: [id])
+  engagementStatus  EngagementStatus    @default(PENDING)
+  priority          PriorityLevel       @default(MEDIUM)
+  notes             String?             @db.Text
+  lastContact       DateTime?
+  nextFollowUp      DateTime?
+  dealValue         Float?
+  dealCurrency      String?             @default("INR")
+  dealType          DealType?           // e.g., "PURCHASE", "SERVICE", "CONSULTATION"
+  createdAt         DateTime            @default(now())
+  updatedAt         DateTime            @updatedAt
+  engagementHistory EngagementHistory[]
+  invoiceImages     InvoiceImage[]
+  invoices          Invoice[]
+}
+
+model EngagementHistory {
+  id                String    @id @default(cuid())
+  engagementId      String
+  engagement        BuyerEngagement @relation(fields: [engagementId], references: [id], onDelete: Cascade)
+  action            String    // e.g., "STATUS_CHANGE", "NOTE_ADDED", "CONTACT_MADE"
+  details           String?   @db.Text
+  previousStatus    EngagementStatus?
+  newStatus         EngagementStatus?
+  previousPriority  PriorityLevel?
+  newPriority       PriorityLevel?
+  createdAt         DateTime  @default(now())
+}
+
+model InvoiceImage {
+  id            String    @id @default(cuid())
+  filename      String
+  filePath      String
+  mimeType      String
+  vendorId      String
+  vendor        Vendor    @relation(fields: [vendorId], references: [id], onDelete: Cascade)
+  engagementId  String
+  engagement    BuyerEngagement @relation(fields: [engagementId], references: [id], onDelete: Cascade)
+  uploadedAt    DateTime  @default(now())
+  invoice       Invoice?
+}
+
+model Invoice {
+  id                String        @id @default(cuid())
+  invoiceNumber     String
+  invoiceDate       DateTime
+  dueDate           DateTime?
+  vendorName        String
+  vendorAddress     String?       @db.Text
+  vendorGstin       String?
+  vendorPhone       String?
+  vendorEmail       String?
+  buyerName         String
+  buyerAddress      String?       @db.Text
+  buyerGstin        String?
+  buyerPhone        String?
+  buyerEmail        String?
+  currency          String        @default("INR")
+  subtotal          Float
+  taxAmount         Float
+  totalAmount       Float
+  paymentTerms      String?
+  paymentMethod     String?
+  notes             String?       @db.Text
+  confidence        Float         // AI extraction confidence (0-1)
+  extractionQuality String        // HIGH, MEDIUM, LOW
+  missingFields     String[]      // Array of missing field names
+  warnings          String[]      // Array of warning messages
+  verificationStatus VerificationStatus @default(PENDING) // Invoice verification status
+  invoiceImageId    String        @unique
+  invoiceImage      InvoiceImage  @relation(fields: [invoiceImageId], references: [id], onDelete: Cascade)
+  engagementId      String
+  engagement        BuyerEngagement @relation(fields: [engagementId], references: [id], onDelete: Cascade)
+  createdAt         DateTime      @default(now())
+  updatedAt         DateTime      @updatedAt
+  items             InvoiceItem[]
+  ratings           InvoiceRating[]
+}
+
+model InvoiceItem {
+  id          String   @id @default(cuid())
+  invoiceId   String
+  invoice     Invoice  @relation(fields: [invoiceId], references: [id], onDelete: Cascade)
+  description String
+  quantity    Float
+  unit        String?
+  unitPrice   Float
+  totalPrice  Float
+  taxRate     Float?
+  taxAmount   Float?
+  createdAt   DateTime @default(now())
+}
+
+model InvoiceRating {
+  id          String   @id @default(cuid())
+  invoiceId   String
+  invoice     Invoice  @relation(fields: [invoiceId], references: [id], onDelete: Cascade)
+  raterId     String
+  rater       User     @relation(fields: [raterId], references: [id], onDelete: Cascade)
+  rating      Int      // 1-5 stars
+  review      String?  @db.Text
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  @@unique([invoiceId, raterId]) // One rating per user per invoice
+}
+
+// New models for wage verification
+model WageVerification {
+  id                String              @id @default(cuid())
+  vendorId          String
+  vendor            Vendor              @relation(fields: [vendorId], references: [id], onDelete: Cascade)
+  fileName          String
+  filePath          String
+  originalFilename  String
+  verificationStatus VerificationStatus @default(PENDING)
+  uploadedAt        DateTime            @default(now())
+  lastVerifiedAt    DateTime?
+  verificationSummary String?
+  extractedData     Json?              // Parsed wage data from file
+  verificationDetails Json?             // Detailed verification results
+  confidenceScore   Float?             // AI confidence score (0-1)
+  riskScore         Float?             // Risk score for compliance
+  totalWorkers      Int?
+  totalDiscrepancies Int?
+  createdAt         DateTime            @default(now())
+  updatedAt         DateTime            @updatedAt
+  wageRecords       WageRecord[]
+  discrepancies     WageDiscrepancy[]
+  history           WageVerificationHistory[]
+}
+
+model WageRecord {
+  id                String            @id @default(cuid())
+  wageVerificationId String
+  wageVerification  WageVerification  @relation(fields: [wageVerificationId], references: [id], onDelete: Cascade)
+  workerId          String?           // Employee ID
+  workerName        String?
+  department        String?
+  position          String?
+  baseWage          Float?
+  overtimeWage      Float?
+  overtimeHours     Float?
+  overtimePay       Float?
+  totalWage         Float?
+  calculatedOvertimePay Float?        // Calculated overtime pay based on rate
+  discrepancy       Boolean           @default(false)
+  discrepancyReason String?
+  rowNumber         Int?              // Original row number in file
+  createdAt         DateTime          @default(now())
+}
+
+model WageDiscrepancy {
+  id                String            @id @default(cuid())
+  wageVerificationId String
+  wageVerification  WageVerification  @relation(fields: [wageVerificationId], references: [id], onDelete: Cascade)
+  workerId          String?
+  workerName        String?
+  discrepancyType   DiscrepancyType
+  description       String
+  severity          DiscrepancySeverity
+  expectedValue     String?
+  actualValue       String?
+  rowNumber         Int?
+  createdAt         DateTime          @default(now())
+}
+
+model WageVerificationHistory {
+  id                String            @id @default(cuid())
+  wageVerificationId String
+  wageVerification  WageVerification  @relation(fields: [wageVerificationId], references: [id], onDelete: Cascade)
+  action            String            // e.g., "UPLOAD", "VERIFICATION_COMPLETE", "STATUS_CHANGE"
+  details           String?
+  previousStatus    VerificationStatus?
+  newStatus         VerificationStatus?
+  changedByUserId   String?
+  changedByUser     User?             @relation(fields: [changedByUserId], references: [id])
+  timestamp         DateTime          @default(now())
+}
+
+enum UserRole { 
+  VENDOR_ADMIN
+  BUYER_ADMIN
+  SYSTEM_ADMIN 
+}
+
+enum ComplianceStatus { 
+  GREEN
+  AMBER
+  RED 
+}
+
+enum VerificationStatus { 
+  PENDING
+  PENDING_API_VALIDATION  // Passed local checks, waiting for API
+  PENDING_MANUAL_REVIEW   // Needs human review
+  VERIFIED               // Fully verified
+  REJECTED              // Failed verification
+  EXPIRED              // Was valid but expired
+  MISSING             // Required but not uploaded
+}
+
+enum CompliancePillar {
+  FACTORY_REGISTRATION_SAFETY
+  WAGES_OVERTIME
+  ESI_PF_COVERAGE
+  CHILD_LABOR_AGE_VERIFICATION
+  ENVIRONMENTAL
+}
+
+enum EngagementStatus {
+  ACTIVE
+  PENDING
+  COMPLETED
+  ON_HOLD
+  CANCELLED
+}
+
+enum PriorityLevel {
+  LOW
+  MEDIUM
+  HIGH
+  URGENT
+}
+
+enum DealType {
+  PURCHASE
+  SERVICE
+  CONSULTATION
+  PARTNERSHIP
+  LICENSING
+}
+
+enum DiscrepancyType {
+  EMPTY_FILE
+  MISSING_DATA
+  OVERTIME_RATE_MISMATCH
+  OVERTIME_PAY_CALCULATION_ERROR
+  BASE_WAGE_BELOW_MINIMUM
+  MISSING_OVERTIME_HOURS
+  MISSING_OVERTIME_PAY
+  INCONSISTENT_OVERTIME_DATA
+  INCONSISTENT_WAGE_STRUCTURE
+  TOTAL_WAGE_CALCULATION_ERROR
+  DUPLICATE_ENTRIES
+  INVALID_DATA_FORMAT
+  OTHER
+}
+
+enum DiscrepancySeverity {
+  LOW
+  MEDIUM
+  HIGH
+  CRITICAL
+}
